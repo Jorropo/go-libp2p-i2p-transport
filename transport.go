@@ -53,12 +53,13 @@ func init() {
 var pinArgentéMaddr ma.Multiaddr
 
 type pinArgenté struct {
-	network core.Core
-	priv    crypto.PrivKey
-	id      peer.ID
-	rcmgr   network.ResourceManager
-	tlsId   *p2ptls.Identity
-	qConfig *quic.Config
+	network   core.Core
+	priv      crypto.PrivKey
+	id        peer.ID
+	rcmgr     network.ResourceManager
+	tlsId     *p2ptls.Identity
+	qConfig   *quic.Config
+	listening uint32
 }
 
 var ErrOnlySupportEd25519 = errors.New("Pin argenté only supports Ed25519 keys")

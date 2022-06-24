@@ -3,7 +3,9 @@ package argente
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net"
+	"sync/atomic"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -17,7 +19,17 @@ import (
 	"github.com/lucas-clemente/quic-go"
 )
 
+var ErrAlreadyListening = errors.New("Pin argenté only support listening once at a time")
+
 func (p *pinArgenté) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
+	if !p.CanDial(laddr) {
+		return nil, ErrNotPinArgentéMaddr
+	}
+
+	if atomic.SwapUint32(&p.listening, 1) == 1 {
+		return nil, ErrAlreadyListening
+	}
+
 	var tlsConf tls.Config
 	tlsConf.GetConfigForClient = func(_ *tls.ClientHelloInfo) (*tls.Config, error) {
 		// return a tls.Config that verifies the peer's certificate chain.
@@ -30,6 +42,7 @@ func (p *pinArgenté) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 
 	qlist, err := quic.Listen(&p.network, &tlsConf, p.qConfig)
 	if err != nil {
+		atomic.StoreUint32(&p.listening, 0)
 		return nil, err
 	}
 
@@ -100,5 +113,6 @@ func (l *listener) Addr() net.Addr {
 }
 
 func (l *listener) Close() error {
+	atomic.StoreUint32(&l.t.listening, 0)
 	return l.qlist.Close()
 }
