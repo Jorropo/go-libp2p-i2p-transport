@@ -36,10 +36,13 @@ const statelessResetKeyInfo = "libp2p Pin argenté stateless reset key"
 const P_PIN_ARGENTÉ = 0x3f42
 
 func init() {
+	VCode := make([]byte, binary.MaxVarintLen64)
+	n := binary.PutUvarint(VCode, P_PIN_ARGENTÉ)
+	VCode = VCode[:n:n]
 	ma.AddProtocol(ma.Protocol{
 		Name:  "pin-argenté",
 		Code:  P_PIN_ARGENTÉ,
-		VCode: binary.AppendUvarint(nil, P_PIN_ARGENTÉ),
+		VCode: VCode,
 		Size:  0,
 	})
 
