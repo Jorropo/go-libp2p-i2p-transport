@@ -152,7 +152,7 @@ func New(peers, listens []string, localDiscovery bool) func(priv crypto.PrivKey,
 			}}
 		}
 
-		// this double encrypts the traffic, investigate and remove not quic's encryption
+		// FIXME: this double encrypts the traffic, investigate and remove not quic's encryption
 		err = p.network.Start(conf, l)
 		if err != nil {
 			return nil, err

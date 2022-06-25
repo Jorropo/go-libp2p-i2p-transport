@@ -2,16 +2,12 @@ package argente
 
 import (
 	"context"
-	"crypto/ed25519"
 	"errors"
-	"net"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/transport"
-
-	"github.com/yggdrasil-network/yggdrasil-go/src/address"
 
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -40,8 +36,7 @@ func (p *pinArgenté) Dial(ctx context.Context, raddr ma.Multiaddr, id peer.ID) 
 	}
 	tlsConf, _ := p.tlsId.ConfigForPeer(id)
 
-	yaddr := address.AddrForKey(ed25519.PublicKey(pubBytes))
-	addr := &net.IPAddr{IP: net.IP(yaddr[:]), Zone: ""}
+	addr := address(pubBytes)
 
 	connScope, err := p.rcmgr.OpenConnection(network.DirOutbound, false)
 	if err != nil {

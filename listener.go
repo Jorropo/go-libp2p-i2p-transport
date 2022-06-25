@@ -2,6 +2,7 @@ package argente
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
 	"errors"
 	"net"
@@ -40,7 +41,7 @@ func (p *pinArgenté) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 		return conf, nil
 	}
 
-	qlist, err := quic.Listen(&p.network, &tlsConf, p.qConfig)
+	qlist, err := quic.Listen(packetConn{&p.network, *(*[ed25519.PublicKeySize]byte)(p.network.PublicKey())}, &tlsConf, p.qConfig)
 	if err != nil {
 		atomic.StoreUint32(&p.listening, 0)
 		return nil, err
@@ -115,4 +116,14 @@ func (l *listener) Addr() net.Addr {
 func (l *listener) Close() error {
 	atomic.StoreUint32(&l.t.listening, 0)
 	return l.qlist.Close()
+}
+
+type packetConn struct {
+	net.PacketConn
+
+	pub [ed25519.PublicKeySize]byte
+}
+
+func (p packetConn) LocalAddr() net.Addr {
+	return address(p.pub[:])
 }
