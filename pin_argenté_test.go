@@ -2,12 +2,17 @@ package argente
 
 import (
 	mrand "math/rand"
+	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/transport"
 	rcmgr "github.com/libp2p/go-libp2p-resource-manager"
 	ttransport "github.com/libp2p/go-libp2p/p2p/transport/testsuite"
+
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 func TestPinArgentéTransport(t *testing.T) {
@@ -50,6 +55,28 @@ func TestPinArgentéTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	zero := "/pin-argenté"
-	ttransport.SubtestTransport(t, ta, tb, zero, ap)
+	subTest(t, ta, tb, pinArgentéMaddr, ap)
+}
+
+func getFunctionName(i interface{}) string {
+	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
+}
+
+// subTest is pulled out of ttransport because some tests require multiple listens (which we don't support)
+func subTest(t *testing.T, ta, tb transport.Transport, addr ma.Multiaddr, peerA peer.ID) {
+	banned := [...]string{
+		getFunctionName(ttransport.SubtestStressManyConn10Stream50Msg), // we don't support concurrent listens on a single transport
+	}
+
+	for _, f := range ttransport.Subtests {
+		fname := getFunctionName(f)
+		t.Run(fname, func(t *testing.T) {
+			for _, w := range banned {
+				if fname == w {
+					t.SkipNow()
+				}
+			}
+			f(t, ta, tb, addr, peerA)
+		})
+	}
 }
