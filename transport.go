@@ -1,14 +1,12 @@
 package argente
 
 import (
-	"crypto/sha256"
+	"crypto/ed25519"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
-	"io"
+	"fmt"
 	"net"
-
-	"golang.org/x/crypto/hkdf"
+	"sync/atomic"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -16,18 +14,16 @@ import (
 	"github.com/libp2p/go-libp2p-core/pnet"
 	"github.com/libp2p/go-libp2p-core/transport"
 
+	ironwood "github.com/Arceliar/ironwood/network"
+
 	p2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 
-	"github.com/yggdrasil-network/yggdrasil-go/src/config"
-	"github.com/yggdrasil-network/yggdrasil-go/src/core"
-
-	logme "github.com/gologme/log"
 	logging "github.com/ipfs/go-log/v2"
 
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 var log = logging.Logger("pin-argenté-tpt")
@@ -56,32 +52,31 @@ func init() {
 var pinArgentéMaddr ma.Multiaddr
 
 type pinArgenté struct {
-	network   core.Core
-	priv      crypto.PrivKey
-	id        peer.ID
-	rcmgr     network.ResourceManager
-	tlsId     *p2ptls.Identity
-	qConfig   *quic.Config
-	listening uint32
+	privP2p          crypto.PrivKey
+	privStd          ed25519.PrivateKey
+	id               peer.ID
+	rcmgr            network.ResourceManager
+	tlsId            *p2ptls.Identity
+	peeringListeners []net.Listener
+	packet           *ironwood.PacketConn
+	q                quic.Transport
+	listening        atomic.Bool
 }
 
 var ErrOnlySupportEd25519 = errors.New("Pin argenté only supports Ed25519 keys")
 var ErrPrivateNetworkNotSupported = errors.New("Pin argenté doesn't support private networks")
+
+const maxQuicPacketBufferSize = 1452
 
 var quicConfig = &quic.Config{
 	MaxIncomingStreams:         256,
 	MaxIncomingUniStreams:      -1,             // disable unidirectional streams
 	MaxStreamReceiveWindow:     10 * (1 << 20), // 10 MB
 	MaxConnectionReceiveWindow: 15 * (1 << 20), // 15 MB
-	AcceptToken: func(clientAddr net.Addr, _ *quic.Token) bool {
-		// TODO(#6): require source address validation when under load
-		return true
-	},
-	KeepAlive: true,
-	Versions:  []quic.VersionNumber{quic.VersionDraft29, quic.Version1},
+	// TODO; harmonize MTU between QUIC and Ironwood
 }
 
-func New(peers, listens []string, localDiscovery bool) func(priv crypto.PrivKey, pub crypto.PubKey, id peer.ID, psk pnet.PSK, rcmgr network.ResourceManager) (transport.Transport, error) {
+func New(peers, listens []string) func(priv crypto.PrivKey, pub crypto.PubKey, id peer.ID, psk pnet.PSK, rcmgr network.ResourceManager) (transport.Transport, error) {
 	return func(priv crypto.PrivKey, pub crypto.PubKey, id peer.ID, psk pnet.PSK, rcmgr network.ResourceManager) (transport.Transport, error) {
 		if priv.Type() != crypto.Ed25519 {
 			return nil, ErrOnlySupportEd25519
@@ -95,67 +90,42 @@ func New(peers, listens []string, localDiscovery bool) func(priv crypto.PrivKey,
 		if err != nil {
 			return nil, err
 		}
-		pubBytes, err := pub.Raw()
-		if err != nil {
-			return nil, err
-		}
+		privEd25519 := ed25519.PrivateKey(privBytes)
 
 		tlsId, err := p2ptls.NewIdentity(priv)
 		if err != nil {
 			return nil, err
 		}
 
-		keyReader := hkdf.New(sha256.New, privBytes, nil, []byte(statelessResetKeyInfo))
-		qConfig := quicConfig.Clone()
-		qConfig.StatelessResetKey = make([]byte, 32)
-		_, err = io.ReadFull(keyReader, qConfig.StatelessResetKey)
-		if err != nil {
-			return nil, err
-		}
-		qConfig.Tracer = tracer
-
 		if rcmgr == nil {
 			rcmgr = network.NullResourceManager
 		}
 
 		p := &pinArgenté{
-			priv:    priv,
+			privP2p: priv,
+			privStd: privEd25519,
 			id:      id,
 			rcmgr:   rcmgr,
 			tlsId:   tlsId,
-			qConfig: qConfig,
 		}
-
-		// TODO: refactor logging to be compatible with our logging system
-		l := logme.Default()
-		l.DisableAllLevels()
-
-		conf := &config.NodeConfig{
-			// TODO: refactor yggdrasil-go to accept crypto/ed25519 types, hexing here is silly
-			PrivateKey: hex.EncodeToString(privBytes),
-			PublicKey:  hex.EncodeToString(pubBytes),
-			Peers:      peers,
-			Listen:     listens,
-			// TODO: test with increasing this limit
-			IfMTU: 1500,
-			NodeInfo: map[string]interface{}{
-				"pin-argenté": true,
-			},
+		p.packet, err = ironwood.NewPacketConn(privEd25519)
+		if err != nil {
+			return nil, fmt.Errorf("creating network")
 		}
+		p.q.Conn = p.packet
 
-		if localDiscovery {
-			conf.MulticastInterfaces = []config.MulticastInterfaceConfig{{
-				Regex:  "*",
-				Beacon: true,
-				Listen: true,
-				Port:   0,
-			}}
-		}
-
-		// FIXME: this double encrypts the traffic, investigate and remove not quic's encryption
-		err = p.network.Start(conf, l)
+		err = p.listenPeerings(listens)
 		if err != nil {
 			return nil, err
+		}
+
+		for _, peer := range peers {
+			go func() {
+				err := p.dialPeering(peer)
+				if err != nil {
+					log.Errorf("dialing peering %s: %s", peer, err)
+				}
+			}()
 		}
 
 		return p, nil
@@ -163,7 +133,7 @@ func New(peers, listens []string, localDiscovery bool) func(priv crypto.PrivKey,
 }
 
 func (p *pinArgenté) Close() error {
-	return p.network.Close()
+	return errors.Join(p.q.Close(), p.packet.Close(), p.closePeeringListeners())
 }
 
 var dialMatcher = mafmt.Base(P_PIN_ARGENTÉ)

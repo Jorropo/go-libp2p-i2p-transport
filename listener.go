@@ -2,11 +2,9 @@ package argente
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/tls"
 	"errors"
 	"net"
-	"sync/atomic"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -17,7 +15,7 @@ import (
 
 	ma "github.com/multiformats/go-multiaddr"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 var ErrAlreadyListening = errors.New("Pin argenté only support listening once at a time")
@@ -27,7 +25,7 @@ func (p *pinArgenté) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 		return nil, ErrNotPinArgentéMaddr
 	}
 
-	if atomic.SwapUint32(&p.listening, 1) == 1 {
+	if p.listening.Swap(true) {
 		return nil, ErrAlreadyListening
 	}
 
@@ -41,9 +39,9 @@ func (p *pinArgenté) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 		return conf, nil
 	}
 
-	qlist, err := quic.Listen(packetConn{&p.network, *(*[ed25519.PublicKeySize]byte)(p.network.PublicKey())}, &tlsConf, p.qConfig)
+	qlist, err := p.q.Listen(&tlsConf, quicConfig)
 	if err != nil {
-		atomic.StoreUint32(&p.listening, 0)
+		p.listening.Store(false)
 		return nil, err
 	}
 
@@ -55,7 +53,7 @@ func (p *pinArgenté) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 
 type listener struct {
 	t     *pinArgenté
-	qlist quic.Listener
+	qlist *quic.Listener
 }
 
 func (l *listener) Accept() (transport.CapableConn, error) {
@@ -110,20 +108,13 @@ func (l *listener) Multiaddr() ma.Multiaddr {
 }
 
 func (l *listener) Addr() net.Addr {
-	return l.t.network.LocalAddr()
+	return l.t.packet.LocalAddr()
 }
 
 func (l *listener) Close() error {
-	atomic.StoreUint32(&l.t.listening, 0)
-	return l.qlist.Close()
-}
-
-type packetConn struct {
-	net.PacketConn
-
-	pub [ed25519.PublicKeySize]byte
-}
-
-func (p packetConn) LocalAddr() net.Addr {
-	return address(p.pub[:])
+	err := l.qlist.Close()
+	if err == nil {
+		l.t.listening.Store(false)
+	}
+	return err
 }

@@ -31,7 +31,7 @@ func TestPinArgentéTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ta, err := New(nil, []string{"tcp://127.13.37.42:12345"}, false)(apriv, apub, ap, nil, arcmgr)
+	ta, err := New(nil, []string{"tcp://127.13.37.42:12345"})(apriv, apub, ap, nil, arcmgr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestPinArgentéTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tb, err := New([]string{"tcp://127.13.37.42:12345"}, nil, false)(bpriv, bpub, bp, nil, brcmgr)
+	tb, err := New([]string{"tcp://127.13.37.42:12345"}, nil)(bpriv, bpub, bp, nil, brcmgr)
 	if err != nil {
 		t.Fatal(err)
 	}

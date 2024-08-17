@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Arceliar/ironwood/types"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -11,7 +12,7 @@ import (
 
 	ma "github.com/multiformats/go-multiaddr"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 var ErrNotPinArgentéMaddr = errors.New("non Pin argenté maddr passed in")
@@ -36,8 +37,6 @@ func (p *pinArgenté) Dial(ctx context.Context, raddr ma.Multiaddr, id peer.ID) 
 	}
 	tlsConf, _ := p.tlsId.ConfigForPeer(id)
 
-	addr := address(pubBytes)
-
 	connScope, err := p.rcmgr.OpenConnection(network.DirOutbound, false)
 	if err != nil {
 		log.Debugw("resource manager blocked outgoing connection", "peer", p, "addr", raddr, "error", err)
@@ -49,7 +48,7 @@ func (p *pinArgenté) Dial(ctx context.Context, raddr ma.Multiaddr, id peer.ID) 
 		return nil, err
 	}
 
-	qconn, err := quic.DialContext(ctx, &p.network, addr, addr.String(), tlsConf, p.qConfig)
+	qconn, err := p.q.Dial(ctx, types.Addr(pubBytes), tlsConf, quicConfig)
 	if err != nil {
 		connScope.Done()
 		return nil, err
@@ -89,7 +88,7 @@ func (c *conn) LocalPeer() peer.ID {
 }
 
 func (c *conn) LocalPrivateKey() crypto.PrivKey {
-	return c.t.priv
+	return c.t.privP2p
 }
 
 func (c *conn) RemotePeer() peer.ID {
