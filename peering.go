@@ -100,8 +100,7 @@ func (p *pinArgenté) handshakeAndAddPeering(conn net.Conn) (err error) {
 		return sendError
 	}
 
-	p.packet.HandleConn(remote, conn, 0)
-	return nil
+	return p.packet.HandleConn(remote, conn, 0)
 }
 
 func (p *pinArgenté) closePeeringListeners() (err error) {
