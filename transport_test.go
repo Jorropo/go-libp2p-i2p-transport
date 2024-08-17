@@ -9,7 +9,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/transport"
-	rcmgr "github.com/libp2p/go-libp2p-resource-manager"
 	ttransport "github.com/libp2p/go-libp2p/p2p/transport/testsuite"
 
 	ma "github.com/multiformats/go-multiaddr"
@@ -26,12 +25,7 @@ func TestPinArgentéTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	arcmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultLimiter())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ta, err := New(nil, []string{"tcp://127.13.37.42:12345"})(apriv, apub, ap, nil, arcmgr)
+	ta, err := New(nil, []string{"tcp://127.13.37.42:12345"})(apriv, apub, ap, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,12 +39,7 @@ func TestPinArgentéTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	brcmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultLimiter())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tb, err := New([]string{"tcp://127.13.37.42:12345"}, nil)(bpriv, bpub, bp, nil, brcmgr)
+	tb, err := New([]string{"tcp://127.13.37.42:12345"}, nil)(bpriv, bpub, bp, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
