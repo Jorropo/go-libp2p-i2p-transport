@@ -8,11 +8,11 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/pnet"
-	"github.com/libp2p/go-libp2p-core/transport"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/pnet"
+	"github.com/libp2p/go-libp2p/core/transport"
 
 	ironwood "github.com/Arceliar/ironwood/network"
 
@@ -98,7 +98,7 @@ func New(peers, listens []string) func(priv crypto.PrivKey, pub crypto.PubKey, i
 		}
 
 		if rcmgr == nil {
-			rcmgr = network.NullResourceManager
+			rcmgr = &network.NullResourceManager{}
 		}
 
 		p := &pinArgenté{

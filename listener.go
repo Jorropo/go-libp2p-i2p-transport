@@ -6,10 +6,10 @@ import (
 	"errors"
 	"net"
 
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/transport"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/transport"
 
 	p2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 
@@ -62,7 +62,7 @@ func (l *listener) Accept() (transport.CapableConn, error) {
 		if err != nil {
 			return nil, err
 		}
-		connScope, err := l.t.rcmgr.OpenConnection(network.DirInbound, false)
+		connScope, err := l.t.rcmgr.OpenConnection(network.DirInbound, false, pinArgentéMaddr)
 		if err != nil {
 			qconn.CloseWithError(0, err.Error())
 			log.Debugw("resource manager blocked incoming connection", "addr", qconn.RemoteAddr(), "error", err)

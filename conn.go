@@ -5,10 +5,10 @@ import (
 	"errors"
 
 	"github.com/Arceliar/ironwood/types"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/transport"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/transport"
 
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -37,7 +37,7 @@ func (p *pinArgenté) Dial(ctx context.Context, raddr ma.Multiaddr, id peer.ID) 
 	}
 	tlsConf, _ := p.tlsId.ConfigForPeer(id)
 
-	connScope, err := p.rcmgr.OpenConnection(network.DirOutbound, false)
+	connScope, err := p.rcmgr.OpenConnection(network.DirOutbound, false, raddr)
 	if err != nil {
 		log.Debugw("resource manager blocked outgoing connection", "peer", p, "addr", raddr, "error", err)
 		return nil, err
@@ -121,4 +121,8 @@ func (c *conn) OpenStream(ctx context.Context) (network.MuxedStream, error) {
 func (c *conn) AcceptStream() (network.MuxedStream, error) {
 	qstr, err := c.qconn.AcceptStream(context.Background())
 	return &stream{Stream: qstr}, err
+}
+
+func (c *conn) ConnState() network.ConnectionState {
+	return network.ConnectionState{Transport: "silverpine"}
 }
