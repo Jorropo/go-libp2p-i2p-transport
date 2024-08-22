@@ -1,12 +1,13 @@
-package argente
+package i2p_tpt
 
 import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/eyedeekay/i2pkeys"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/transport"
@@ -20,9 +21,25 @@ import (
 
 var ErrAlreadyListening = errors.New("Pin argenté only support listening once at a time")
 
-func (p *pinArgenté) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
+func (p *i2p) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 	if !p.CanDial(laddr) {
 		return nil, ErrNotPinArgentéMaddr
+	}
+
+	addr, err := i2pMaddrToAddr(laddr)
+	if err != nil {
+		return nil, err
+	}
+
+	typedAddr, ok := addr.(i2pkeys.I2PDestHash)
+	if !ok {
+		// FIXME: figure out a way to listen with a particular key
+		return nil, fmt.Errorf("expected %v listen addr, got %T", emptyMaddr, addr)
+	}
+
+	if typedAddr != (i2pkeys.I2PDestHash{}) {
+		// FIXME: figure out a way to listen with a particular key
+		return nil, fmt.Errorf("expected %v listen addr, got %v", emptyMaddr, laddr)
 	}
 
 	if p.listening.Swap(true) {
@@ -52,7 +69,7 @@ func (p *pinArgenté) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 }
 
 type listener struct {
-	t     *pinArgenté
+	t     *i2p
 	qlist *quic.Listener
 }
 
@@ -62,7 +79,12 @@ func (l *listener) Accept() (transport.CapableConn, error) {
 		if err != nil {
 			return nil, err
 		}
-		connScope, err := l.t.rcmgr.OpenConnection(network.DirInbound, false, pinArgentéMaddr)
+		remoteMaddr, err := addrToI2pMaddr(qconn.RemoteAddr())
+		if err != nil {
+			qconn.CloseWithError(0, err.Error())
+			return nil, err
+		}
+		connScope, err := l.t.rcmgr.OpenConnection(network.DirInbound, false, remoteMaddr)
 		if err != nil {
 			qconn.CloseWithError(0, err.Error())
 			log.Debugw("resource manager blocked incoming connection", "addr", qconn.RemoteAddr(), "error", err)
@@ -70,12 +92,6 @@ func (l *listener) Accept() (transport.CapableConn, error) {
 		}
 		pub, err := p2ptls.PubKeyFromCertChain(qconn.ConnectionState().TLS.PeerCertificates)
 		if err != nil {
-			qconn.CloseWithError(0, err.Error())
-			connScope.Done()
-			return nil, err
-		}
-		if pub.Type() != crypto.Ed25519 {
-			err := ErrOnlySupportEd25519
 			qconn.CloseWithError(0, err.Error())
 			connScope.Done()
 			return nil, err
@@ -104,11 +120,15 @@ func (l *listener) Accept() (transport.CapableConn, error) {
 }
 
 func (l *listener) Multiaddr() ma.Multiaddr {
-	return pinArgentéMaddr
+	addr, err := addrToI2pMaddr(l.Addr())
+	if err != nil {
+		panic(fmt.Errorf("unreachable: self address is not valid i2p: %w", err))
+	}
+	return addr
 }
 
 func (l *listener) Addr() net.Addr {
-	return l.t.packet.LocalAddr()
+	return l.t.datagram.Addr()
 }
 
 func (l *listener) Close() error {

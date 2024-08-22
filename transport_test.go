@@ -1,7 +1,8 @@
-package argente
+package i2p_tpt
 
 import (
-	mrand "math/rand"
+	"crypto/sha256"
+	mrand "math/rand/v2"
 	"reflect"
 	"runtime"
 	"testing"
@@ -14,8 +15,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-func TestPinArgentéTransport(t *testing.T) {
-	seed := mrand.New(mrand.NewSource(9876543210))
+func TestI2pTransport(t *testing.T) {
+	seed := mrand.NewChaCha8(sha256.Sum256([]byte("i2p-transport-test")))
 	apriv, apub, err := crypto.GenerateEd25519Key(seed)
 	if err != nil {
 		t.Fatal(err)
@@ -25,7 +26,9 @@ func TestPinArgentéTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ta, err := New(nil, []string{"tcp://127.13.37.42:12345"})(apriv, apub, ap, nil, nil)
+	opts := []string{"inbound.length=0", "outbound.length=0", "inbound.lengthVariance=0", "outbound.lengthVariance=0", "inbound.quantity=1", "outbound.quantity=1"}
+
+	ta, err := New("127.0.0.1:7656", opts)(apriv, ap, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,12 +42,12 @@ func TestPinArgentéTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tb, err := New([]string{"tcp://127.13.37.42:12345"}, nil)(bpriv, bpub, bp, nil, nil)
+	tb, err := New("127.0.0.1:7656", opts)(bpriv, bp, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	subTest(t, ta, tb, pinArgentéMaddr, ap)
+	subTest(t, ta, tb, emptyMaddr, ap)
 }
 
 func getFunctionName(i interface{}) string {

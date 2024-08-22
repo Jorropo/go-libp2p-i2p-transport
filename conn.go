@@ -1,10 +1,10 @@
-package argente
+package i2p_tpt
 
 import (
 	"context"
 	"errors"
+	"fmt"
 
-	"github.com/Arceliar/ironwood/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -17,38 +17,31 @@ import (
 
 var ErrNotPinArgentéMaddr = errors.New("non Pin argenté maddr passed in")
 
-func (p *pinArgenté) Dial(ctx context.Context, raddr ma.Multiaddr, id peer.ID) (transport.CapableConn, error) {
-	if !p.CanDial(raddr) {
+func (p *i2p) Dial(ctx context.Context, rmaddr ma.Multiaddr, id peer.ID) (transport.CapableConn, error) {
+	if !p.CanDial(rmaddr) {
 		return nil, ErrNotPinArgentéMaddr
 	}
 
-	pub, err := id.ExtractPublicKey()
-	if err != nil {
-		return nil, err
-	}
+	tlsConf, pubc := p.tlsId.ConfigForPeer(id)
 
-	if pub.Type() != crypto.Ed25519 {
-		return nil, ErrOnlySupportEd25519
-	}
-
-	pubBytes, err := pub.Raw()
+	connScope, err := p.rcmgr.OpenConnection(network.DirOutbound, false, rmaddr)
 	if err != nil {
-		return nil, err
-	}
-	tlsConf, _ := p.tlsId.ConfigForPeer(id)
-
-	connScope, err := p.rcmgr.OpenConnection(network.DirOutbound, false, raddr)
-	if err != nil {
-		log.Debugw("resource manager blocked outgoing connection", "peer", p, "addr", raddr, "error", err)
+		log.Debugw("resource manager blocked outgoing connection", "peer", p, "addr", rmaddr, "error", err)
 		return nil, err
 	}
 	if err := connScope.SetPeer(id); err != nil {
-		log.Debugw("resource manager blocked outgoing connection for peer", "peer", p, "addr", raddr, "error", err)
+		log.Debugw("resource manager blocked outgoing connection for peer", "peer", p, "addr", rmaddr, "error", err)
 		connScope.Done()
 		return nil, err
 	}
 
-	qconn, err := p.q.Dial(ctx, types.Addr(pubBytes), tlsConf, quicConfig)
+	raddr, err := i2pMaddrToAddr(rmaddr)
+	if err != nil {
+		connScope.Done()
+		return nil, err
+	}
+
+	qconn, err := p.q.Dial(ctx, raddr, tlsConf, quicConfig)
 	if err != nil {
 		connScope.Done()
 		return nil, err
@@ -58,13 +51,13 @@ func (p *pinArgenté) Dial(ctx context.Context, raddr ma.Multiaddr, id peer.ID) 
 		t:     p,
 		scope: connScope,
 		id:    id,
-		pub:   pub,
+		pub:   <-pubc,
 		qconn: qconn,
 	}, nil
 }
 
 type conn struct {
-	t     *pinArgenté
+	t     *i2p
 	scope network.ConnManagementScope
 	id    peer.ID
 	pub   crypto.PubKey
@@ -76,11 +69,19 @@ func (c *conn) Transport() transport.Transport {
 }
 
 func (c *conn) LocalMultiaddr() ma.Multiaddr {
-	return pinArgentéMaddr
+	addr, err := addrToI2pMaddr(c.qconn.LocalAddr())
+	if err != nil {
+		panic(fmt.Errorf("unreachable: self address is not valid i2p: %w", err))
+	}
+	return addr
 }
 
 func (c *conn) RemoteMultiaddr() ma.Multiaddr {
-	return pinArgentéMaddr
+	addr, err := addrToI2pMaddr(c.qconn.RemoteAddr())
+	if err != nil {
+		panic(fmt.Errorf("unreachable: created connection with invalid i2p addr: %w", err))
+	}
+	return addr
 }
 
 func (c *conn) LocalPeer() peer.ID {
@@ -124,5 +125,5 @@ func (c *conn) AcceptStream() (network.MuxedStream, error) {
 }
 
 func (c *conn) ConnState() network.ConnectionState {
-	return network.ConnectionState{Transport: "silverpine"}
+	return network.ConnectionState{Transport: "i2p"}
 }

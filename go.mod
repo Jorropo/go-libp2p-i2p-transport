@@ -1,9 +1,10 @@
-module github.com/Jorropo/go-pin-argente
+module github.com/Jorropo/go-libp2p-i2p-transport
 
 go 1.23
 
 require (
-	github.com/Arceliar/ironwood v0.0.0-20240529054413-b8e59574e2b2
+	github.com/eyedeekay/i2pkeys v0.33.7
+	github.com/eyedeekay/sam3 v0.33.7
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/libp2p/go-libp2p v0.36.2
 	github.com/multiformats/go-multiaddr v0.13.0
@@ -12,9 +13,6 @@ require (
 )
 
 require (
-	github.com/Arceliar/phony v0.0.0-20220903101357-530938a4b13d // indirect
-	github.com/bits-and-blooms/bitset v1.13.0 // indirect
-	github.com/bits-and-blooms/bloom/v3 v3.7.0 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
